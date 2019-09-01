@@ -1,25 +1,118 @@
-﻿
-Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28010.2026
-MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CPUTEMP", "CPUTEMP\CPUTEMP.csproj", "{CCC2A2C6-A984-41B6-BE16-0520FE6C80B9}"
-EndProject
-Global
-	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|Any CPU = Debug|Any CPU
-		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{CCC2A2C6-A984-41B6-BE16-0520FE6C80B9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{CCC2A2C6-A984-41B6-BE16-0520FE6C80B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{CCC2A2C6-A984-41B6-BE16-0520FE6C80B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{CCC2A2C6-A984-41B6-BE16-0520FE6C80B9}.Release|Any CPU.Build.0 = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {7D1E048C-5A72-4062-BD8A-F4656FCC2308}
-	EndGlobalSection
-EndGlobal
+using System;
+using System.Windows.Forms;
+using System.Management;
+using System.Diagnostics;
+using System.Threading;
+using System.Net;
+using System.Net.Mail;
+
+
+namespace CPUTEMP
+{
+    public partial class Form1 : Form
+    {
+        public Form1()
+        {
+            InitializeComponent();
+        }
+        //Вызов функции отправки сообщения на почту данных о температуре, где from - от кого письмо
+        //to - кому приходит письмо
+        private  void SendEmailMessage(string from = "test_mail_2020@mail.ru", string fromPassword = "1999pasha", string to = "kosova.da@yandex.ru")
+                    {
+            //try и catch служат в данном случае для обработки исколючения отсутствия
+            //интернет соединения
+            try
+            {
+                SmtpClient client = new SmtpClient("smtp.mail.ru", 587);
+                client.EnableSsl = true;
+                client.Timeout = 10000;
+                MailMessage m = new MailMessage(from, to);
+                m.Subject = "Температура Вашего процессора превышает 35 градусов по цельсию";
+                client.DeliveryMethod = SmtpDeliveryMethod.Network;
+                client.UseDefaultCredentials = false;
+                client.Credentials = new NetworkCredential(from, fromPassword);
+                client.Send(m);
+            }
+            catch
+            {
+                MessageBox.Show("Проверьте подключение к сети Интернет");
+            }
+
+                    }
+        //Вызов функции отправки данных об интернете на почту
+        private void SendEmailMessage2(string from = "test_mail_2020@mail.ru", string fromPassword = "1999pasha", string to = "kosova.da@yandex.ru")
+        {
+            try
+            {
+                SmtpClient client = new SmtpClient("smtp.mail.ru", 587);
+                client.EnableSsl = true;
+                client.Timeout = 10000;
+                MailMessage m = new MailMessage(from, to);
+                m.Subject = "Интернет есть, все в порядке";
+                client.DeliveryMethod = SmtpDeliveryMethod.Network;
+                client.UseDefaultCredentials = false;
+                client.Credentials = new NetworkCredential(from, fromPassword);
+                client.Send(m);
+            }
+            catch
+            {
+                MessageBox.Show("Проверьте подключение к сети Интернет");
+            }
+
+        }
+        private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
+        }
+        //Событие нажатия на кнопку
+        private void button1_Click(object sender, EventArgs e)
+        {
+            listBox1.Items.Clear();
+            //Здесь мы подключаем System.Managment, чтобы получить данные о температуре
+            //И вывести их на listbox1
+            try
+            {
+                Double CPUtprt = 0;
+                System.Management.ManagementObjectSearcher MOS = new System.Management.ManagementObjectSearcher("root\\WMI", "SELECT * FROM MSAcpi_ThermalZoneTemperature");
+                foreach (System.Management.ManagementObject Mo in MOS.Get())
+                {
+                    CPUtprt = Convert.ToDouble(Convert.ToDouble(Mo.GetPropertyValue("CurrentTemperature".ToString())) - 2360) / 10.0;
+                    listBox1.Items.Clear();
+                    listBox1.Items.Add(" CPU: " + CPUtprt.ToString() + " ° C");
+                    //comboBox1.Items.Add(" CPU: " + CPUtprt.ToString() + " ° C");
+                }
+                if (CPUtprt >= 35) { 
+                    
+                    MessageBox.Show("Температура Вашего Процессора превышает 35 градусов Цельсия");
+                    SendEmailMessage();
+
+                }
+            }
+            catch (ManagementException ex)
+            {
+                MessageBox.Show("Ошибка получения данных " + ex.Message);
+            }
+
+
+            //Здесь мы пытаемся получить данные по интернет - трафику, где
+            //PerformanceCounterSent - сколько трафика мы отправили
+            //PerformanceCounterReceived - сколько трафика мы получили
+            PerformanceCounterCategory performanceCounterCategory = new PerformanceCounterCategory("Network Interface");
+            string instance = performanceCounterCategory.GetInstanceNames()[0]; // 1st NIC !
+            PerformanceCounter performanceCounterSent = new PerformanceCounter("Network Interface", "Bytes Sent/sec", instance);
+            PerformanceCounter performanceCounterReceived = new PerformanceCounter("Network Interface", "Bytes Received/sec", instance);
+            if (performanceCounterSent != null)
+                SendEmailMessage2();
+            //Данные будут приходить в течение пяти секунд
+            for (int i = 0; i < 10; i++)
+            {
+                //listBox2.Items.Add("bytes sent: {0}k");
+                listBox2.Items.Add(performanceCounterSent.NextValue() / 1024);
+                //listBox3.Items.Add("bytes received: {1}k");
+                listBox3.Items.Add(performanceCounterReceived.NextValue() / 1024);
+                //Console.WriteLine("bytes sent: {0}k\tbytes received: {1}k", performanceCounterSent.NextValue() / 1024, performanceCounterReceived.NextValue() / 1024);
+                Thread.Sleep(500);
+            }
+        }
+    }
+}
